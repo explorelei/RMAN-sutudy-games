@@ -1,367 +1,243 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  BookOpen, 
-  CheckCircle2, 
-  XCircle, 
-  RotateCcw, 
-  Trophy, 
-  ChevronRight,
-  Database,
-  ShieldCheck,
-  Zap,
-  HelpCircle,
-  ExternalLink
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RMAN Glossary Quiz Master</title>
+    <!-- React, ReactDOM, Babel for JSX, and Tailwind CSS via CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .animate-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
 
-const GLOSSARY_URL = "https://docs.oracle.com/cd/E82638_01/bradv/glossary.html";
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
 
-// --- Quiz Data (Expanded to 20 terms) ---
-const QUIZ_DATA = [
-  {
-    id: 1,
-    term: "ターゲット・データベース (Target Database)",
-    definition: "RMANがバックアップ、復元、またはリカバリを実行する対象となるデータベースのこと。",
-    options: ["RMANが操作の対象とするデータベース", "メタデータを保存するためのデータベース", "複製を作成するための一時的なデータベース", "バックアップを保存するストレージ"]
-  },
-  {
-    id: 2,
-    term: "リカバリ・カタログ (Recovery Catalog)",
-    definition: "1つ以上のターゲット・データベースに関するRMANのメタデータを保存するために使用されるデータベース・スキーマ。",
-    options: ["RMANのメタデータを永続的に管理する外部データベース", "バックアップ・ファイルの物理的な保存場所", "初期化パラメータ・ファイル", "インメモリ・領域"]
-  },
-  {
-    id: 3,
-    term: "チャネル (Channel)",
-    definition: "RMANとデータベース・インスタンス間の接続を表し、I/Oリソースを割り当てるための論理的な経路。",
-    options: ["RMANがI/Oを実行するために割り当てる論理的な作業単位", "ネットワーク通信のための物理ケーブル", "バックアップ・データの暗号化キー", "管理用GUI"]
-  },
-  {
-    id: 4,
-    term: "高速リカバリ領域 (Fast Recovery Area - FRA)",
-    definition: "バックアップ、アーカイブ・ログ、フラッシュバック・ログなどのリカバリ関連ファイルを一元管理するディスク上の領域。",
-    options: ["リカバリ関連ファイルを自動管理するディスク上の保存場所", "OSのルート直下のフォルダ", "バッファ・キャッシュの別名", "SGA内のログ領域"]
-  },
-  {
-    id: 5,
-    term: "バックアップ・セット (Backup Set)",
-    definition: "RMAN独自の形式で作成される論理的なバックアップの単位。1つ以上のバックアップ・ピースで構成される。",
-    options: ["RMANが独自のバイナリ形式で作成する論理単位", "OSコマンドでコピーした物理ファイルの集まり", "全表領域をエクスポートしたファイル", "読み取り専用表領域のみのバックアップ"]
-  },
-  {
-    id: 6,
-    term: "増分バックアップ (Incremental Backup)",
-    definition: "以前のバックアップ以降に変更されたデータ・ブロックのみを保存するバックアップ形式。",
-    options: ["前回から変更されたブロックのみを保存する手法", "データベース全体を最初からコピーする手法", "特定のユーザーのみを対象とするバックアップ", "インデックスのみのバックアップ"]
-  },
-  {
-    id: 7,
-    term: "補助データベース (Auxiliary Database)",
-    definition: "データベースの複製（DUPLICATE）やTSPITRの際に、一時的に使用されるデータベース・インスタンス。",
-    options: ["リカバリ作業や複製時に一時的に作成されるインスタンス", "本番環境の待機系データベース", "分析専用データベース", "SQL練習用のサンドボックス"]
-  },
-  {
-    id: 8,
-    term: "保存方針 (Retention Policy)",
-    definition: "バックアップをいつまで保持するか、またはリカバリに必要などのバックアップを残すかを定義するルール。",
-    options: ["バックアップの保持期間や必要性を管理するルール", "パスワードの有効期限規則", "アーカイブ・ログの削除頻度設定", "ファイルサイズを制限する設定"]
-  },
-  {
-    id: 9,
-    term: "クロスチェック (Crosscheck)",
-    definition: "RMANリポジトリ内のメタデータと、ディスク上の実際のバックアップ・ファイルとの不整合を確認する操作。",
-    options: ["カタログ情報と実ファイルが存在するかを確認・同期する操作", "DBA同士によるダブルチェック", "破損ブロックを修復するコマンド", "暗号化の検証プロセス"]
-  },
-  {
-    id: 10,
-    term: "アーカイブ・ログ (Archived Redo Log)",
-    definition: "オンライン・redoログ・ファイルがいっぱいになった後に、別の場所にコピーされて保存されたファイル。",
-    options: ["オンライン・ログの内容を保存し、リカバリに使用されるファイル", "SQL実行履歴をテキスト保存したファイル", "クローズド・バックアップのコピー", "アラート・ログの圧縮版"]
-  },
-  {
-    id: 11,
-    term: "イメージ・コピー (Image Copy)",
-    definition: "データファイル、制御ファイル、またはアーカイブ・ログのビット単位のコピー。OSのコピーコマンドと同様の形式。",
-    options: ["OSのコピーと同様のビット単位のファイルコピー", "RMAN独自の圧縮形式のバックアップ", "データベースのスクリーンショット", "メタデータのみのバックアップ"]
-  },
-  {
-    id: 12,
-    term: "バックアップ・ピース (Backup Piece)",
-    definition: "バックアップ・セットの内容が含まれる物理ファイル。",
-    options: ["バックアップ・セットを構成する実際の物理ファイル", "メモリ上に一時的に作成されるバッファ", "ログ・ファイルの部分的な断片", "テープ・ドライブの最小記録単位"]
-  },
-  {
-    id: 13,
-    term: "リカバリ・ウィンドウ (Recovery Window)",
-    definition: "現在の時間から過去にさかのぼってリカバリ可能であることを保証する期間（日数）。",
-    options: ["過去にさかのぼってリカバリ可能であることを保証する日数", "リカバリ作業にかかる目標時間(RTO)", "バックアップの実行が許可される時間枠", "メンテナンス・ウィンドウの別名"]
-  },
-  {
-    id: 14,
-    term: "冗長性 (Redundancy)",
-    definition: "保存方針において、保持しておく必要がある同一バックアップの最小個数。",
-    options: ["保持しておくべきバックアップの最小個数", "データの重複率をパーセントで表したもの", "RAID構成の種類", "ネットワーク経路の二重化"]
-  },
-  {
-    id: 15,
-    term: "ブロック・メディア・リカバリ (Block Media Recovery)",
-    definition: "データ・ファイルをオンラインのまま、破損した特定のデータ・ブロックのみを復元・リカバリする機能。",
-    options: ["特定の破損したデータ・ブロックのみをピンポイントで修復する", "ファイルシステム全体の整合性をチェックする", "ディスク・ブロックのサイズを変更する操作", "メモリ・ブロックをクリアする機能"]
-  },
-  {
-    id: 16,
-    term: "制御ファイルの自動バックアップ (Control File Autobackup)",
-    definition: "バックアップの完了時やデータベース構造の変更時に、RMANが自動的に制御ファイルとサーバー・パラメータ・ファイルをバックアップする機能。",
-    options: ["変更時にRMANが自動で制御ファイルをバックアップする機能", "毎日決まった時間に制御ファイルをコピーするスケジュール設定", "OS起動時に制御ファイルを保護する機能", "ログ・スイッチごとにアーカイブを行う機能"]
-  },
-  {
-    id: 17,
-    term: "フラッシュバック・データベース (Flashback Database)",
-    definition: "不適切な操作などが行われた際、データベース全体を過去の特定の時点まで迅速に戻す機能。",
-    options: ["データベース全体を過去の特定の時点へ迅速に戻す機能", "削除された1つの表のみを復元する機能", "SQLの実行を1ステップずつ戻す機能", "メモリの状態を再起動前に戻す機能"]
-  },
-  {
-    id: 18,
-    term: "不完全リカバリ (Incomplete Recovery)",
-    definition: "データベースを現在より前の特定の時点（SCN、時刻、またはログ順序番号）までリカバリすること。",
-    options: ["特定の過去の時点までデータベースをリカバリすること", "一部の表領域のみをリカバリから除外すること", "バックアップが失敗した状態でのリカバリ", "破損したブロックを無視して起動すること"]
-  },
-  {
-    id: 19,
-    term: "メディア管理レイヤー (Media Management Layer - MML)",
-    definition: "RMANがテープ・デバイスなどのサードパーティ製ストレージ・デバイスに書き込むために使用するライブラリ。",
-    options: ["RMANがテープなどの外部デバイスを制御するためのライブラリ", "バックアップ・メディアの表面をスキャンするツール", "ディスクの物理的な配置を管理するOSレイヤー", "DVDやCD-ROMを焼くための専用ソフトウェア"]
-  },
-  {
-    id: 20,
-    term: "カタログ化 (Cataloging)",
-    definition: "RMANの外部で作成されたバックアップ・ファイルやコピーの情報をRMANリポジトリに追加する操作。",
-    options: ["外部のバックアップ情報をRMANリポジトリに登録する操作", "バックアップ・ファイルに名前を付けて整理すること", "データベース内の全テーブルを索引付けすること", "マニュアルをアルファベット順に並べること"]
-  }
-];
+        const GLOSSARY_URL = "https://docs.oracle.com/cd/E82638_01/bradv/glossary.html";
 
-const App = () => {
-  const [gameState, setGameState] = useState('start'); // start, playing, result
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [score, setScore] = useState(0);
-  const [showFeedback, setShowFeedback] = useState(false);
-  const [selectedOption, setSelectedOption] = useState(null);
-  const [shuffledQuestions, setShuffledQuestions] = useState([]);
+        const QUIZ_DATA = [
+            { id: 1, term: "ターゲット・データベース (Target Database)", definition: "RMANがバックアップ、復元、またはリカバリを実行する対象となるデータベースのこと。", options: ["RMANが操作の対象とするデータベース", "メタデータを保存するためのデータベース", "複製を作成するための一時的なデータベース", "バックアップを保存するストレージ"] },
+            { id: 2, term: "リカバリ・カタログ (Recovery Catalog)", definition: "1つ以上のターゲット・データベースに関するRMAN의 メタデータを保存するために使用されるデータベース・スキーマ。", options: ["RMANのメタデータを永続的に管理する外部データベース", "バックアップ・ファイルの物理的な保存場所", "初期化パラメータ・ファイル", "インメモリ・領域"] },
+            { id: 3, term: "チャネル (Channel)", definition: "RMANとデータベース・インスタンス間の接続を表し、I/Oリソースを割り当てるための論理的な経路。", options: ["RMANがI/Oを実行するために割り当てる論理的な作業単位", "ネットワーク通信のための物理ケーブル", "バックアップ・データの暗号化キー", "管理用GUI"] },
+            { id: 4, term: "高速リカバリ領域 (Fast Recovery Area - FRA)", definition: "バックアップ、アーカイブ・ログ、フラッシュバック・ログなどのリカバリ関連ファイルを一元管理するディスク上の領域。", options: ["リカバリ関連ファイルを自動管理するディスク上の保存場所", "OSのルート直下のフォルダ", "バッファ・キャッシュの別名", "SGA内のログ領域"] },
+            { id: 5, term: "バックアップ・セット (Backup Set)", definition: "RMAN独自の形式で作成される論理的なバックアップの単位。1つ以上のバックアップ・ピースで構成される。", options: ["RMANが独自のバイナリ形式で作成する論理単位", "OSコマンドでコピーした物理ファイルの集まり", "全表領域をエクスポートしたファイル", "読み取り専用表領域のみのバックアップ"] },
+            { id: 6, term: "増分バックアップ (Incremental Backup)", definition: "以前のバックアップ以降に変更されたデータ・ブロックのみを保存するバックアップ形式。", options: ["前回から変更されたブロックのみを保存する手法", "データベース全体を最初からコピーする手法", "特定のユーザーのみを対象とするバックアップ", "インデックスのみのバックアップ"] },
+            { id: 7, term: "補助データベース (Auxiliary Database)", definition: "データベースの複製（DUPLICATE）やTSPITRの際に、一時的に使用されるデータベース・インスタンス。", options: ["リカバリ作業や複製時に一時的に作成されるインスタンス", "本番環境の待機系データベース", "分析専用データベース", "SQL練習用のサンドボックス"] },
+            { id: 8, term: "保存方針 (Retention Policy)", definition: "バックアップをいつまで保持するか、またはリカバリに必要などのバックアップを残すかを定義するルール。", options: ["バックアップの保持期間や必要性を管理するルール", "パスワードの有効期限規則", "アーカイブ・ログの削除頻度設定", "ファイルサイズを制限する設定"] },
+            { id: 9, term: "クロスチェック (Crosscheck)", definition: "RMANリポジトリ内のメタデータと、ディスク上の実際のバックアップ・ファイルとの不整合を確認する操作。", options: ["カタログ情報と実ファイルが存在するかを確認・同期する操作", "DBA同士によるダブルチェック", "破損ブロックを修復するコマンド", "暗号化の検証プロセス"] },
+            { id: 10, term: "アーカイブ・ログ (Archived Redo Log)", definition: "オンライン・redoログ・ファイルがいっぱいになった後に、別の場所にコピーされて保存されたファイル。", options: ["オンライン・ログの内容を保存し、リカバリに使用されるファイル", "SQL実行履歴をテキスト保存したファイル", "クローズド・バックアップのコピー", "アラート・ログの圧縮版"] },
+            { id: 11, term: "イメージ・コピー (Image Copy)", definition: "データファイル、制御ファイル、またはアーカイブ・ログのビット単位のコピー。OSのコピーコマンドと同様の形式。", options: ["OSのコピーと同様のビット単位のファイルコピー", "RMAN独自の圧縮形式のバックアップ", "データベースのスクリーンショット", "メタデータのみのバックアップ"] },
+            { id: 12, term: "バックアップ・ピース (Backup Piece)", definition: "バックアップ・セットの内容が含まれる物理ファイル。", options: ["バックアップ・セットを構成する実際の物理ファイル", "メモリ上に一時的に作成されるバッファ", "ログ・ファイルの部分的な断片", "テープ・ドライブの最小記録単位"] },
+            { id: 13, term: "リカバリ・ウィンドウ (Recovery Window)", definition: "現在の時間から過去にさかのぼってリカバリ可能であることを保証する期間（日数）。", options: ["過去にさかのぼってリカバリ可能であることを保証する日数", "リカバリ作業にかかる目標時間(RTO)", "バックアップの実行が許可される時間枠", "メンテナンス・ウィンドウの別名"] },
+            { id: 14, term: "冗長性 (Redundancy)", definition: "保存方針において、保持しておく必要がある同一バックアップの最小個数。", options: ["保持しておくべきバックアップの最小個数", "データの重複率をパーセントで表したもの", "RAID構成の種類", "ネットワーク経路の二重化"] },
+            { id: 15, term: "ブロック・メディア・リカバリ (Block Media Recovery)", definition: "データ・ファイルをオンラインのまま、破損した特定のデータ・ブロックのみを復元・リカバリする機能。", options: ["特定の破損したデータ・ブロックのみをピンポイントで修復する", "ファイルシステム全体の整合性をチェックする", "ディスク・ブロックのサイズを変更する操作", "メモリ・ブロックをクリアする機能"] },
+            { id: 16, term: "制御ファイルの自動バックアップ (Control File Autobackup)", definition: "バックアップの完了時やデータベース構造の変更時に、RMANが自動的に制御ファイルとサーバー・パラメータ・ファイルをバックアップする機能。", options: ["変更時にRMANが自動で制御ファイルをバックアップする機能", "毎日決まった時間に制御ファイルをコピーするスケジュール設定", "OS起動時に制御ファイルを保護する機能", "ログ・スイッチごとにアーカイブを行う機能"] },
+            { id: 17, term: "フラッシュバック・データベース (Flashback Database)", definition: "不適切な操作などが行われた際、データベース全体を過去の特定の時点まで迅速に戻す機能。", options: ["データベース全体を過去の特定の時点へ迅速に戻す機能", "削除された1つの表のみを復元する機能", "SQLの実行を1ステップずつ戻す機能", "メモリの状態を再起動前に戻す機能"] },
+            { id: 18, term: "不完全リカバリ (Incomplete Recovery)", definition: "データベースを現在より前の特定の時点（SCN、時刻、またはログ順序番号）までリカバリすること。", options: ["特定の過去の時点までデータベースをリカバリすること", "一部の表領域のみをリカバリから除外すること", "バックアップが失敗した状態でのリカバリ", "破損したブロックを無視して起動すること"] },
+            { id: 19, term: "メディア管理レイヤー (Media Management Layer - MML)", definition: "RMANがテープ・デバイスなどのサードパーティ製ストレージ・デバイスに書き込むために使用するライブラリ。", options: ["RMANがテープなどの外部デバイスを制御するためのライブラリ", "バックアップ・メディアの表面をスキャンするツール", "ディスクの物理的な配置を管理するOSレイヤー", "DVDやCD-ROMを焼くための専用ソフトウェア"] },
+            { id: 20, term: "カタログ化 (Cataloging)", definition: "RMANの外部で作成されたバックアップ・ファイルやコピーの情報をRMANリポジトリに追加する操作。", options: ["外部のバックアップ情報をRMANリポジトリに登録する操作", "バックアップ・ファイルに名前を付けて整理すること", "データベース内の全テーブルを索引付けすること", "マニュアルをアルファベット順に並べること"] }
+        ];
 
-  const startGame = () => {
-    const shuffled = [...QUIZ_DATA].sort(() => Math.random() - 0.5).map(q => ({
-      ...q,
-      options: [...q.options].sort(() => Math.random() - 0.5)
-    }));
-    setShuffledQuestions(shuffled);
-    setCurrentIdx(0);
-    setScore(0);
-    setGameState('playing');
-    setShowFeedback(false);
-    setSelectedOption(null);
-  };
+        // --- Icon Component helper ---
+        const Icon = ({ name, size = 20, className = "" }) => {
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [name]);
+            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        };
 
-  const currentQuestion = shuffledQuestions[currentIdx];
+        const App = () => {
+            const [gameState, setGameState] = useState('start');
+            const [currentIdx, setCurrentIdx] = useState(0);
+            const [score, setScore] = useState(0);
+            const [showFeedback, setShowFeedback] = useState(false);
+            const [selectedOption, setSelectedOption] = useState(null);
+            const [shuffledQuestions, setShuffledQuestions] = useState([]);
 
-  const handleOptionClick = (option) => {
-    if (showFeedback) return;
-    setSelectedOption(option);
-    setShowFeedback(true);
-    
-    const originalData = QUIZ_DATA.find(q => q.id === currentQuestion.id);
-    const isCorrect = option === originalData.options[0];
+            const startGame = () => {
+                const shuffled = [...QUIZ_DATA].sort(() => Math.random() - 0.5).map(q => ({
+                    ...q,
+                    options: [...q.options].sort(() => Math.random() - 0.5)
+                }));
+                setShuffledQuestions(shuffled);
+                setCurrentIdx(0);
+                setScore(0);
+                setGameState('playing');
+                setShowFeedback(false);
+                setSelectedOption(null);
+            };
 
-    if (isCorrect) {
-      setScore(prev => prev + 1);
-    }
-  };
+            const currentQuestion = shuffledQuestions[currentIdx];
 
-  const handleNext = () => {
-    setShowFeedback(false);
-    setSelectedOption(null);
-    if (currentIdx + 1 < shuffledQuestions.length) {
-      setCurrentIdx(prev => prev + 1);
-    } else {
-      setGameState('result');
-    }
-  };
+            const handleOptionClick = (option) => {
+                if (showFeedback) return;
+                setSelectedOption(option);
+                setShowFeedback(true);
+                const originalData = QUIZ_DATA.find(q => q.id === currentQuestion.id);
+                if (option === originalData.options[0]) {
+                    setScore(prev => prev + 1);
+                }
+            };
 
-  const isCorrectChoice = (option) => {
-    return option === QUIZ_DATA.find(q => q.id === currentQuestion.id).options[0];
-  };
+            const handleNext = () => {
+                setShowFeedback(false);
+                setSelectedOption(null);
+                if (currentIdx + 1 < shuffledQuestions.length) {
+                    setCurrentIdx(prev => prev + 1);
+                } else {
+                    setGameState('result');
+                }
+            };
 
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800">
-      {/* Persistent Glossary Link Footer */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-3 z-50 flex justify-center items-center shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        <a 
-          href={GLOSSARY_URL} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-semibold transition-colors bg-blue-50 px-4 py-2 rounded-full border border-blue-100"
-        >
-          <ExternalLink size={16} />
-          Oracle RMAN Glossary Reference
-        </a>
-      </div>
+            const isCorrectChoice = (option) => {
+                return option === QUIZ_DATA.find(q => q.id === currentQuestion.id).options[0];
+            };
 
-      <div className="flex-1 flex flex-col items-center justify-center p-4 pb-20">
-        {gameState === 'start' && (
-          <div className="max-w-xl w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
-            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 text-center text-white">
-              <div className="bg-white/20 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 backdrop-blur-sm">
-                <Database size={40} className="text-white" />
-              </div>
-              <h1 className="text-3xl font-bold mb-2 tracking-tight">Oracle RMAN Master Quiz</h1>
-              <p className="text-blue-100 opacity-90">用語集の20問を全問正解しよう</p>
-            </div>
-            <div className="p-8">
-              <div className="bg-blue-50/50 rounded-2xl p-5 mb-8 space-y-3">
-                <p className="text-sm font-semibold text-blue-800 flex items-center gap-2">
-                  <BookOpen size={16} />
-                  合計 {QUIZ_DATA.length} 問の専門用語
-                </p>
-                <p className="text-sm text-slate-600">
-                  RMANの基本概念から高度な機能まで、幅広く出題されます。
-                  正解を確認しながら学習を進めましょう。
-                </p>
-              </div>
-              <button 
-                onClick={startGame}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 group shadow-lg shadow-blue-200 active:scale-[0.98]"
-              >
-                クイズを開始する
-                <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
-              </button>
-            </div>
-          </div>
-        )}
+            return (
+                <div className="min-h-screen flex flex-col">
+                    {/* Fixed Footer */}
+                    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-3 z-50 flex justify-center items-center shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                        <a 
+                            href={GLOSSARY_URL} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-semibold transition-colors bg-blue-50 px-4 py-2 rounded-full border border-blue-100"
+                        >
+                            <Icon name="external-link" size={16} />
+                            Oracle RMAN Glossary Reference
+                        </a>
+                    </div>
 
-        {gameState === 'playing' && (
-          <div className="max-w-2xl w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in duration-300">
-            {/* Progress Bar */}
-            <div className="h-2 w-full bg-slate-100">
-              <div 
-                className="h-full bg-blue-500 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
-                style={{ width: `${((currentIdx + 1) / shuffledQuestions.length) * 100}%` }}
-              />
-            </div>
+                    <div className="flex-1 flex flex-col items-center justify-center p-4 pb-24">
+                        {gameState === 'start' && (
+                            <div className="max-w-xl w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100 animate-in">
+                                <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 text-center text-white">
+                                    <div className="bg-white/20 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 backdrop-blur-sm">
+                                        <Icon name="database" size={40} className="text-white" />
+                                    </div>
+                                    <h1 className="text-3xl font-bold mb-2 tracking-tight">RMAN Master Quiz</h1>
+                                    <p className="text-blue-100 opacity-90">用語集の20問にチャレンジしましょう</p>
+                                </div>
+                                <div className="p-8 text-center">
+                                    <div className="bg-blue-50/50 rounded-2xl p-5 mb-8 text-left space-y-3">
+                                        <p className="text-sm font-semibold text-blue-800 flex items-center gap-2">
+                                            <Icon name="book-open" size={16} />
+                                            全 {QUIZ_DATA.length} 問
+                                        </p>
+                                        <p className="text-sm text-slate-600">
+                                            RMANの基本概念、バックアップ形式、リカバリ手法など、現場で必要な用語を幅広く網羅しています。
+                                        </p>
+                                    </div>
+                                    <button 
+                                        onClick={startGame}
+                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg"
+                                    >
+                                        クイズを開始する
+                                        <Icon name="chevron-right" size={20} />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
-            <div className="p-6 md:p-8">
-              <div className="flex justify-between items-center mb-8">
-                <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-black uppercase tracking-widest">
-                  {currentIdx + 1} / {shuffledQuestions.length}
-                </span>
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-yellow-50 text-yellow-700 rounded-full text-sm font-bold border border-yellow-100">
-                  <Zap size={14} fill="currentColor" />
-                  Score: {score}
+                        {gameState === 'playing' && (
+                            <div className="max-w-2xl w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100 animate-in">
+                                <div className="h-2 w-full bg-slate-100">
+                                    <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${((currentIdx + 1) / shuffledQuestions.length) * 100}%` }} />
+                                </div>
+                                <div className="p-6 md:p-8">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-black">
+                                            {currentIdx + 1} / {shuffledQuestions.length}
+                                        </span>
+                                        <div className="flex items-center gap-1.5 px-3 py-1 bg-yellow-50 text-yellow-700 rounded-full text-sm font-bold border border-yellow-100">
+                                            <Icon name="zap" size={14} />
+                                            Score: {score}
+                                        </div>
+                                    </div>
+                                    <h2 className="text-xl md:text-2xl font-bold mb-6 flex items-start gap-3">
+                                        <span className="text-blue-600 shrink-0 mt-1"><Icon name="help-circle" size={24} /></span>
+                                        「{currentQuestion.term}」の正しい定義はどれ？
+                                    </h2>
+                                    <div className="grid gap-3">
+                                        {currentQuestion.options.map((option, idx) => {
+                                            const isSelected = selectedOption === option;
+                                            const isCorrect = isCorrectChoice(option);
+                                            let style = "border-slate-200 hover:border-blue-300 hover:bg-blue-50";
+                                            if (showFeedback) {
+                                                if (isCorrect) style = "border-green-500 bg-green-50 text-green-700 ring-4 ring-green-100";
+                                                else if (isSelected) style = "border-red-500 bg-red-50 text-red-700 ring-4 ring-red-100";
+                                                else style = "opacity-40 border-slate-100";
+                                            }
+                                            return (
+                                                <button
+                                                    key={idx}
+                                                    disabled={showFeedback}
+                                                    onClick={() => handleOptionClick(option)}
+                                                    className={`text-left p-4 rounded-xl border-2 transition-all flex items-center justify-between font-medium ${style}`}
+                                                >
+                                                    <span className="text-sm md:text-base">{option}</span>
+                                                    {showFeedback && isCorrect && <Icon name="check-circle-2" size={18} />}
+                                                    {showFeedback && isSelected && !isCorrect && <Icon name="x-circle" size={18} />}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    {showFeedback && (
+                                        <div className="mt-8 animate-in">
+                                            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 mb-6">
+                                                <p className="font-bold text-xs mb-2 text-slate-400 tracking-widest uppercase">解説</p>
+                                                <p className="text-sm md:text-base leading-relaxed font-medium">{currentQuestion.definition}</p>
+                                            </div>
+                                            <button onClick={handleNext} className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">
+                                                {currentIdx + 1 === shuffledQuestions.length ? '結果を表示' : '次の問題へ'}
+                                                <Icon name="chevron-right" size={20} />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {gameState === 'result' && (
+                            <div className="max-w-xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 text-center animate-in">
+                                <div className={`p-12 ${score === shuffledQuestions.length ? 'bg-gradient-to-br from-yellow-400 to-orange-500' : 'bg-gradient-to-br from-blue-500 to-indigo-600'} text-white`}>
+                                    <Icon name="trophy" size={80} className="mx-auto mb-4 opacity-50" />
+                                    <h2 className="text-3xl font-black mb-2 uppercase tracking-tighter">Result</h2>
+                                    <div className="bg-white/20 px-6 py-2 rounded-full inline-block font-black text-2xl">
+                                        {score} / {shuffledQuestions.length}
+                                    </div>
+                                </div>
+                                <div className="p-8">
+                                    <p className="text-slate-600 mb-8 font-medium">
+                                        {score === shuffledQuestions.length ? '完璧です！RMANの基本用語を完全にマスターしました。' : 'お疲れ様でした！間違えた用語を用語集URLから確認して復習しましょう。'}
+                                    </p>
+                                    <button onClick={startGame} className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">
+                                        <Icon name="rotate-ccw" size={20} />
+                                        最初からやり直す
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
-              </div>
+            );
+        };
 
-              <div className="mb-8">
-                <h2 className="text-xl md:text-2xl font-bold mb-4 flex items-start gap-3 leading-tight">
-                  <span className="text-blue-600 shrink-0 mt-1"><BookOpen size={24} /></span>
-                  「{currentQuestion.term}」の正しい定義はどれ？
-                </h2>
-              </div>
-
-              <div className="grid gap-3">
-                {currentQuestion.options.map((option, idx) => {
-                  const isSelected = selectedOption === option;
-                  const isCorrect = isCorrectChoice(option);
-                  
-                  let buttonStyle = "border-slate-200 hover:border-blue-300 hover:bg-blue-50 active:bg-blue-100";
-                  let icon = null;
-
-                  if (showFeedback) {
-                    if (isCorrect) {
-                      buttonStyle = "border-green-500 bg-green-50 text-green-700 ring-4 ring-green-100";
-                      icon = <CheckCircle2 size={18} />;
-                    } else if (isSelected) {
-                      buttonStyle = "border-red-500 bg-red-50 text-red-700 ring-4 ring-red-100";
-                      icon = <XCircle size={18} />;
-                    } else {
-                      buttonStyle = "border-slate-100 opacity-40";
-                    }
-                  }
-
-                  return (
-                    <button
-                      key={idx}
-                      disabled={showFeedback}
-                      onClick={() => handleOptionClick(option)}
-                      className={`text-left p-4 rounded-xl border-2 transition-all flex items-center justify-between font-medium ${buttonStyle}`}
-                    >
-                      <span className="text-sm md:text-base pr-4">{option}</span>
-                      {icon}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {showFeedback && (
-                <div className="mt-8 animate-in slide-in-from-top-4 duration-500">
-                  <div className={`p-5 rounded-2xl ${selectedOption === currentQuestion.options.find(o => isCorrectChoice(o)) ? 'bg-green-50 border border-green-100' : 'bg-red-50 border border-red-100'} mb-6`}>
-                    <p className="font-bold text-sm mb-2 flex items-center gap-1.5 opacity-70">
-                      <HelpCircle size={14} />
-                      EXPLANATION
-                    </p>
-                    <p className="text-sm md:text-base leading-relaxed font-medium">
-                      {currentQuestion.definition}
-                    </p>
-                  </div>
-                  <button 
-                    onClick={handleNext}
-                    className="w-full bg-slate-900 hover:bg-black text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg"
-                  >
-                    {currentIdx + 1 === shuffledQuestions.length ? '結果を見る' : '次の問題へ'}
-                    <ChevronRight size={20} />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {gameState === 'result' && (
-          <div className="max-w-xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 text-center animate-in zoom-in duration-500">
-            <div className={`p-12 ${score === shuffledQuestions.length ? 'bg-gradient-to-br from-yellow-400 to-orange-500' : score >= shuffledQuestions.length * 0.8 ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-gradient-to-br from-slate-600 to-slate-800'} text-white`}>
-              <div className="relative inline-block mb-6">
-                <Trophy size={100} className="opacity-30 absolute -top-4 -left-4 animate-bounce" />
-                <div className="bg-white/20 w-28 h-28 rounded-full flex flex-col items-center justify-center mx-auto backdrop-blur-md border-4 border-white/30 relative z-10">
-                  <span className="text-4xl font-black">{Math.round((score / shuffledQuestions.length) * 100)}</span>
-                  <span className="text-xs font-bold tracking-tighter">SCORE</span>
-                </div>
-              </div>
-              <h2 className="text-3xl font-black mb-2 tracking-tight">
-                {score === shuffledQuestions.length ? 'PERFECT!' : score >= shuffledQuestions.length * 0.8 ? 'GREAT JOB!' : 'WELL DONE!'}
-              </h2>
-              <p className="text-white/80 font-bold px-4 py-1 bg-black/20 rounded-full inline-block">
-                {score} / {shuffledQuestions.length} 正解
-              </p>
-            </div>
-            
-            <div className="p-8">
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 mb-8 text-slate-600">
-                <p className="text-sm md:text-base leading-relaxed">
-                  {score === shuffledQuestions.length ? 'おめでとうございます！RMANの基本用語は完璧です。実際の運用現場でもその知識を活かしましょう！' : 
-                   score >= shuffledQuestions.length * 0.8 ? 'かなり惜しいです！間違えた用語を下のリンクから復習すれば、次は満点を狙えるはずです。' : 
-                   '基本用語を1つずつ着実に覚えていきましょう。下の用語集リンクを参考に、もう一度挑戦してみてください。'}
-                </p>
-              </div>
-
-              <button 
-                onClick={startGame}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-100 hover:shadow-blue-200"
-              >
-                <RotateCcw size={20} />
-                もう一度挑戦する
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-export default App;
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
