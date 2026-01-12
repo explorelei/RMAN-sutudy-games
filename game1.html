@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RMAN Master Training</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Noto+Sans+JP:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        .terminal {
+            font-family: 'Fira Code', monospace;
+            background-color: #1e293b;
+            border-left: 4px solid #f97316;
+        }
+
+        .oracle-red {
+            color: #f34424;
+        }
+
+        .btn-action {
+            transition: all 0.2s;
+            touch-action: manipulation;
+        }
+
+        .btn-action:active {
+            transform: scale(0.95);
+        }
+
+        .progress-bar {
+            transition: width 0.5s ease-in-out;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* スクロールバーのカスタマイズ */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-slate-900 border-b border-slate-700 p-4 sticky top-0 z-10">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 oracle-red" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 4.69 2 8s4.48 6 10 6 10-2.69 10-6-4.48-6-10-6zm0 10c-4.42 0-8-2.24-8-5s3.58-5 8-5 8 2.24 8 5-3.58 5-8 5z"/>
+                    <path d="M12 16c-4.42 0-8-2.24-8-5H2c0 3.31 4.48 6 10 6s10-2.69 10-6h-2c0 2.76-3.58 5-8 5z"/>
+                    <path d="M12 20c-4.42 0-8-2.24-8-5H2c0 3.31 4.48 6 10 6s10-2.69 10-6h-2c0 2.76-3.58 5-8 5z"/>
+                </svg>
+                <h1 class="text-xl font-bold tracking-tight">RMAN <span class="text-slate-400">Master</span></h1>
+            </div>
+            <div class="text-right">
+                <div class="text-xs text-slate-500 uppercase font-bold tracking-widest">Score</div>
+                <div id="score" class="text-xl font-mono text-orange-500">0</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow p-4 md:p-8 max-w-4xl mx-auto w-full">
+        
+        <!-- Progress -->
+        <div class="mb-8">
+            <div class="flex justify-between text-sm mb-2">
+                <span id="stage-name">Loading...</span>
+                <span id="progress-text">0%</span>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-2.5">
+                <div id="progress-bar" class="bg-orange-500 h-2.5 rounded-full progress-bar" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Terminal / Scenario Area -->
+        <div id="game-container" class="fade-in bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col min-h-[400px]">
+            <!-- Terminal Header -->
+            <div class="bg-slate-700 px-4 py-2 flex items-center gap-2">
+                <div class="flex gap-1.5">
+                    <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                </div>
+                <span class="text-xs font-mono text-slate-400 ml-2">rman target /</span>
+            </div>
+
+            <!-- Terminal Content -->
+            <div id="content-area" class="p-6 flex-grow flex flex-col justify-center overflow-y-auto">
+                <!-- Content injected by JS -->
+                <div class="text-center">
+                    <h2 class="text-2xl font-bold mb-4">DBAトレーニング開始</h2>
+                    <p class="text-slate-400 mb-8">Oracle Databaseのバックアップ＆リカバリの要、RMANの技術を習得しましょう。</p>
+                    <button onclick="startGame()" class="bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 px-8 rounded-lg shadow-lg btn-action">
+                        ミッションを開始する
+                    </button>
+                </div>
+            </div>
+
+            <!-- Footer hint -->
+            <div id="hint-area" class="bg-slate-900/50 p-4 border-t border-slate-700 hidden">
+                <p class="text-sm text-slate-400 italic flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span id="hint-text"></span>
+                </p>
+            </div>
+        </div>
+
+        <!-- Mobile Controls Container -->
+        <div id="controls-area" class="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <!-- Buttons injected by JS -->
+        </div>
+
+    </main>
+
+    <!-- Feedback Toast -->
+    <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full font-bold shadow-2xl transition-all opacity-0 pointer-events-none z-50">
+        Message
+    </div>
+
+    <script>
+        const stages = [
+            {
+                id: 'intro',
+                name: 'セクション1: RMANの起動',
+                desc: 'まず、RMAN(Recovery Manager)を起動してターゲットデータベースに接続する必要があります。',
+                task: 'コマンドラインからRMANを起動する正しいコマンドは？',
+                options: [
+                    { text: 'rman target /', correct: true, feedback: '正解！ターゲットデータベース(ローカル)に接続しました。' },
+                    { text: 'rman connect database', correct: false, feedback: '不正解。正しい構文は target 句を使用します。' },
+                    { text: 'sqlplus / as sysdba', correct: false, feedback: 'それはSQL*Plusです。RMANではありません。' }
+                ],
+                hint: 'RMANは「target /」でローカルのDBインスタンスに接続できます。'
+            },
+            {
+                id: 'config_1',
+                name: 'セクション2: 構成設定',
+                desc: 'RMANの設定を確認します。制御ファイルの自動バックアップは非常に重要です。',
+                task: '制御ファイルの自動バックアップを有効にするコマンドは？',
+                options: [
+                    { text: 'CONFIGURE CONTROLFILE AUTOBACKUP ON;', correct: true, feedback: '完璧です。これでDB構造変更時に自動でバックアップされます。' },
+                    { text: 'SET AUTOBACKUP TRUE;', correct: false, feedback: '惜しいですが、RMANでは CONFIGURE コマンドを使用します。' },
+                    { text: 'ALTER SYSTEM SET AUTOBACKUP=ON;', correct: false, feedback: 'これはSQLコマンドです。RMAN内では使用しません。' }
+                ],
+                hint: 'RMANの永続的な設定は CONFIGURE から始まります。'
+            },
+            {
+                id: 'backup_1',
+                name: 'セクション3: 全体バックアップ',
+                desc: '運用の基本、データベース全体のフルバックアップを取得しましょう。',
+                task: 'DB全体とアーカイブログをバックアップする最も一般的なコマンドは？',
+                options: [
+                    { text: 'BACKUP DATABASE PLUS ARCHIVELOG;', correct: true, feedback: '大正解。これで整合性のあるバックアップが取得できます。' },
+                    { text: 'COPY DATABASE;', correct: false, feedback: 'RMANでは COPY ではなく BACKUP コマンドを使用します。' },
+                    { text: 'BACKUP ALL;', correct: false, feedback: '「ALL」というキーワードだけでは不十分です。' }
+                ],
+                hint: 'PLUS ARCHIVELOGを付けることで、バックアップ中に生成されたログも含まれます。'
+            },
+            {
+                id: 'incremental_1',
+                name: 'セクション4: 増分バックアップ',
+                desc: '毎日フルバックアップをとるのは時間がかかります。「差分」だけ取る方法を選んでください。',
+                task: '「増分レベル1」のバックアップを取得するコマンドは？',
+                options: [
+                    { text: 'BACKUP INCREMENTAL LEVEL 1 DATABASE;', correct: true, feedback: '正解！前回のレベル0または1以降の変更のみ保存されます。' },
+                    { text: 'BACKUP DIFFERENTIAL DATABASE;', correct: false, feedback: '概念は正しいですが、コマンドは INCREMENTAL です。' },
+                    { text: 'BACKUP NEW DATA ONLY;', correct: false, feedback: 'そのようなコマンドは存在しません。' }
+                ],
+                hint: 'LEVEL 0がフル、LEVEL 1がその後の差分（または累積）です。'
+            },
+            {
+                id: 'recovery_1',
+                name: 'セクション5: リカバリの基本',
+                desc: '緊急事態！データファイルが破損しました。リカバリの3ステップの順序は？',
+                task: '正しいリカバリ順序を選択してください。',
+                options: [
+                    { text: 'RESTORE -> RECOVER -> OPEN', correct: true, feedback: '完璧！ファイルを物理的に戻し、ログを適用して、DBを開きます。' },
+                    { text: 'RECOVER -> RESTORE -> OPEN', correct: false, feedback: '逆です。まずファイルを戻す(Restore)必要があります。' },
+                    { text: 'OPEN -> RESTORE -> RECOVER', correct: false, feedback: '破損している状態ではOPENできません。' }
+                ],
+                hint: 'まずファイルをバックアップから物理コピー(Restore)し、次に差分ログを適用(Recover)します。'
+            },
+            {
+                id: 'trouble_1',
+                name: 'セクション6: 実践トラブルシューティング',
+                desc: 'DBが起動しません。制御ファイル(Control File)を紛失したようです。どうしますか？',
+                task: '自動バックアップから制御ファイルを復元するには？',
+                options: [
+                    { text: 'RESTORE CONTROLFILE FROM AUTOBACKUP;', correct: true, feedback: '素晴らしい！NOMOUNT状態でこのコマンドを実行すれば復元できます。' },
+                    { text: 'RECREATE CONTROLFILE;', correct: false, feedback: '手動で作成するのは非常に困難で危険です。' },
+                    { text: 'RECOVER CONTROLFILE;', correct: false, feedback: '先にファイルを戻す(Restore)必要があります。' }
+                ],
+                hint: '自動バックアップを有効にしていたので、そこから Restore できます。'
+            }
+        ];
+
+        let currentStageIndex = -1;
+        let score = 0;
+
+        const contentArea = document.getElementById('content-area');
+        const controlsArea = document.getElementById('controls-area');
+        const scoreDisplay = document.getElementById('score');
+        const progressText = document.getElementById('progress-text');
+        const progressBar = document.getElementById('progress-bar');
+        const stageName = document.getElementById('stage-name');
+        const hintArea = document.getElementById('hint-area');
+        const hintText = document.getElementById('hint-text');
+        const toast = document.getElementById('toast');
+
+        function showToast(message, isSuccess) {
+            toast.textContent = message;
+            toast.className = `fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full font-bold shadow-2xl transition-all z-50 ${isSuccess ? 'bg-green-600' : 'bg-red-600'} text-white opacity-100`;
+            setTimeout(() => {
+                toast.style.opacity = '0';
+            }, 3000);
+        }
+
+        function updateProgress() {
+            const percent = Math.round(((currentStageIndex + 1) / stages.length) * 100);
+            progressText.textContent = `${percent}%`;
+            progressBar.style.width = `${percent}%`;
+            scoreDisplay.textContent = score;
+        }
+
+        function startGame() {
+            currentStageIndex = 0;
+            renderStage();
+        }
+
+        function renderStage() {
+            if (currentStageIndex >= stages.length) {
+                showFinalResult();
+                return;
+            }
+
+            const stage = stages[currentStageIndex];
+            stageName.textContent = stage.name;
+            updateProgress();
+
+            // Render Content
+            contentArea.innerHTML = `
+                <div class="fade-in">
+                    <p class="text-slate-400 mb-4 font-mono text-sm">> ${stage.desc}</p>
+                    <div class="terminal p-4 rounded mb-6">
+                        <p class="text-orange-400 font-bold mb-2">RMAN-MISSION:</p>
+                        <p class="text-white">${stage.task}</p>
+                    </div>
+                </div>
+            `;
+
+            // Show Hint
+            hintArea.classList.remove('hidden');
+            hintText.textContent = stage.hint;
+
+            // Render Controls
+            controlsArea.innerHTML = '';
+            stage.options.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = "bg-slate-700 hover:bg-slate-600 border border-slate-600 text-left p-4 rounded-xl btn-action flex items-start gap-3";
+                btn.innerHTML = `
+                    <span class="bg-slate-800 text-orange-500 w-6 h-6 rounded flex items-center justify-center font-bold text-xs mt-0.5">${String.fromCharCode(65 + idx)}</span>
+                    <span class="text-sm md:text-base">${opt.text}</span>
+                `;
+                btn.onclick = () => handleChoice(opt);
+                controlsArea.appendChild(btn);
+            });
+        }
+
+        function handleChoice(option) {
+            if (option.correct) {
+                score += 100;
+                showToast(option.feedback, true);
+                
+                // Visual feedback in terminal
+                const cmdOutput = document.createElement('div');
+                cmdOutput.className = "mt-4 text-green-400 font-mono text-xs fade-in";
+                cmdOutput.innerHTML = `> ${option.text}<br>Command completed successfully.`;
+                contentArea.appendChild(cmdOutput);
+
+                // Move to next stage after short delay
+                setTimeout(() => {
+                    currentStageIndex++;
+                    renderStage();
+                }, 1500);
+            } else {
+                score = Math.max(0, score - 50);
+                showToast(option.feedback, false);
+                scoreDisplay.textContent = score;
+                
+                // Visual shake effect
+                const container = document.getElementById('game-container');
+                container.classList.add('translate-x-1');
+                setTimeout(() => container.classList.remove('translate-x-1'), 50);
+            }
+        }
+
+        function showFinalResult() {
+            stageName.textContent = "トレーニング完了";
+            hintArea.classList.add('hidden');
+            controlsArea.innerHTML = '';
+            
+            let rank = "C - 初心者";
+            if (score >= 600) rank = "S - RMANマスター";
+            else if (score >= 500) rank = "A - 上級DBA";
+            else if (score >= 400) rank = "B - 中級DBA";
+
+            contentArea.innerHTML = `
+                <div class="text-center fade-in">
+                    <div class="mb-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-20 w-20 mx-auto text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                        </svg>
+                    </div>
+                    <h2 class="text-3xl font-bold mb-2">トレーニング完了！</h2>
+                    <p class="text-slate-400 mb-6">全てのミッションをクリアしました。</p>
+                    
+                    <div class="bg-slate-900/50 rounded-xl p-6 mb-8 border border-slate-700 inline-block min-w-[250px]">
+                        <div class="text-sm text-slate-500 uppercase font-bold tracking-widest mb-1">Final Score</div>
+                        <div class="text-4xl font-mono text-orange-500 mb-4">${score}</div>
+                        <div class="text-sm text-slate-500 uppercase font-bold tracking-widest mb-1">DBA Rank</div>
+                        <div class="text-2xl font-bold text-white">${rank}</div>
+                    </div>
+                    
+                    <div>
+                        <button onclick="location.reload()" class="bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-8 rounded-lg shadow-lg btn-action transition-all border border-slate-500">
+                            もう一度挑戦する
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
