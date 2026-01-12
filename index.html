@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RMAN 学習ミニゲーム集</title>
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f5f7fa;
+      color: #333;
+    }
+
+    header {
+      background: #1f2937;
+      color: white;
+      padding: 1.5rem 1rem;
+      text-align: center;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.6rem;
+    }
+
+    header p {
+      margin-top: 0.5rem;
+      font-size: 0.95rem;
+      opacity: 0.85;
+    }
+
+    main {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem;
+    }
+
+    .game-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+    }
+
+    .game-card {
+      background: white;
+      border-radius: 10px;
+      padding: 1.2rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .game-card h2 {
+      margin: 0 0 0.5rem;
+      font-size: 1.1rem;
+    }
+
+    .game-card p {
+      font-size: 0.9rem;
+      line-height: 1.4;
+      margin-bottom: 1rem;
+    }
+
+    .game-card a {
+      display: inline-block;
+      text-align: center;
+      padding: 0.6rem 0.8rem;
+      background: #2563eb;
+      color: white;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+
+    .game-card a:hover {
+      background: #1d4ed8;
+    }
+
+    footer {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #666;
+      padding: 1.5rem 0;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>RMAN 学習ミニゲーム集</h1>
+    <p>Oracle RMAN を「遊びながら理解する」ための個人制作コンテンツ</p>
+  </header>
+
+  <main>
+    <section class="game-list">
+
+      <!-- Game 1 -->
+      <div class="game-card">
+        <h2>ゲーム1</h2>
+        <p>
+          RMAN DBAトレーニング・シミュレーター
+        </p>
+        <a href="game1.html">ゲームを開始</a>
+      </div>
+
+      <div class="game-card">
+        <h2>ゲーム2</h2>
+        <p>
+          RMAN Quest 増分バックアップと迅速なリカバリ
+        </p>
+        <a href="game2.html">ゲームを開始</a>
+      </div>
+
+    </section>
+  </main>
+
+  <footer>
+    <p>
+    </p>
+  </footer>
+</body>
+</html>
