@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RMAN Quest 2: リカバリの守護者</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Noto+Sans+JP:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+        .code-font {
+            font-family: 'Fira Code', monospace;
+        }
+        .terminal-glow {
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.2);
+        }
+        .progress-bar {
+            transition: width 0.5s ease-in-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-4">
+
+    <!-- Header -->
+    <header class="w-full max-w-2xl mb-6 text-center">
+        <h1 class="text-3xl font-bold text-orange-400 mb-2">RMAN Quest 2</h1>
+        <p class="text-slate-400">中級：増分バックアップと迅速なリカバリ</p>
+    </header>
+
+    <!-- Main Game Container -->
+    <main id="game-container" class="w-full max-w-2xl bg-slate-800 rounded-xl shadow-2xl overflow-hidden border border-slate-700">
+        
+        <!-- Status Bar -->
+        <div class="bg-slate-900 p-4 border-b border-slate-700 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Progress</span>
+                <div class="w-32 h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div id="progress" class="h-full bg-orange-500 progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+            <div id="stage-display" class="text-sm font-bold text-orange-400">STAGE 1/4</div>
+        </div>
+
+        <!-- Terminal / Content Area -->
+        <div class="p-6">
+            <div id="scenario-area" class="mb-6">
+                <h2 id="stage-title" class="text-xl font-bold mb-3 text-white"></h2>
+                <div id="scenario-text" class="text-slate-300 leading-relaxed bg-slate-900/50 p-4 rounded-lg border border-slate-700 italic">
+                </div>
+            </div>
+
+            <div id="terminal" class="bg-black rounded-lg p-4 mb-6 terminal-glow border border-green-900/30 hidden">
+                <div class="flex space-x-2 mb-2">
+                    <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                </div>
+                <div id="terminal-content" class="code-font text-green-400 text-sm md:text-base min-h-[100px]">
+                </div>
+            </div>
+
+            <!-- Quiz / Choices Area -->
+            <div id="choices" class="grid grid-cols-1 gap-3">
+                <!-- Buttons will be injected here -->
+            </div>
+
+            <!-- Feedback Area -->
+            <div id="feedback" class="mt-6 p-4 rounded-lg hidden">
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="p-4 bg-slate-900 flex justify-end">
+            <button id="next-btn" class="hidden px-6 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg font-bold transition-colors">
+                次へ進む
+            </button>
+            <button id="restart-btn" class="hidden px-6 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg font-bold transition-colors">
+                最初からやり直す
+            </button>
+        </div>
+    </main>
+
+    <!-- Knowledge Base Footer -->
+    <footer class="mt-8 w-full max-w-2xl bg-slate-900/50 border border-slate-800 p-4 rounded-lg">
+        <h3 class="text-sm font-bold text-slate-500 mb-2 uppercase">DBAのメモ帳</h3>
+        <p class="text-xs text-slate-400">RMANの第2弾では、データの増分管理と、障害発生時の「ダウンタイム最小化」に焦点を当てます。フルバックアップだけでは守れない大規模DBの運用をマスターしましょう。</p>
+    </footer>
+
+    <script>
+        const stages = [
+            {
+                id: 1,
+                title: "増分バックアップの戦略",
+                scenario: "データベースが巨大化し、毎日のフルバックアップに時間がかかりすぎています。まずは『基点』となるバックアップを取り、翌日は『変更分のみ』をバックアップする戦略を立てましょう。基点となるバックアップ（レベル0）のコマンドは？",
+                choices: [
+                    { text: "BACKUP DATABASE INCREMENTAL LEVEL 0;", correct: true, feedback: "正解！増分バックアップを行うには、まずLEVEL 0（実質フルバックアップ）が必要です。これが翌日以降の比較対象になります。" },
+                    { text: "BACKUP DATABASE FULL;", correct: false, feedback: "間違いではありませんが、これでは後続の増分バックアップ（LEVEL 1）の基点として明示されません。" },
+                    { text: "BACKUP INCREMENTAL LEVEL 1 DATABASE;", correct: false, feedback: "LEVEL 1は変更分のみを指します。基点となるLEVEL 0が先に必要です。" }
+                ],
+                terminal: "RMAN> BACKUP DATABASE INCREMENTAL LEVEL 0;"
+            },
+            {
+                id: 2,
+                title: "累積増分 vs 差分増分",
+                scenario: "月曜にLEVEL 0を取りました。火曜・水曜とLEVEL 1を取ります。水曜のバックアップにおいて、『月曜のLEVEL 0からの全ての変更分』を含めたい場合（累積増分）、どの単語を追加しますか？",
+                choices: [
+                    { text: "DIFFERENTIAL", correct: false, feedback: "DIFFERENTIAL（差分）は『直近のLEVEL 0または1』からの変更分のみを含みます。復旧時の手間は増えますがサイズは小さくなります。" },
+                    { text: "CUMULATIVE", correct: true, feedback: "正解！CUMULATIVE（累積）は『直近のLEVEL 0』からの全ての変更を含みます。バックアップサイズは大きくなりますが、リカバリ時に適用するファイル数が減ります。" },
+                    { text: "COMPLETE", correct: false, feedback: "RMANにINCREMENTAL COMPLETEというオプションはありません。" }
+                ],
+                terminal: "RMAN> BACKUP INCREMENTAL LEVEL 1 CUMULATIVE DATABASE;"
+            },
+            {
+                id: 3,
+                title: "アーカイブログの掃除",
+                scenario: "アーカイブログがディスクを圧迫しています。バックアップを取った後に、不要になった古いログファイルをディスクから自動的に削除して整理したいです。最も効率的なコマンドは？",
+                choices: [
+                    { text: "BACKUP ARCHIVELOG ALL; DELETE ARCHIVELOG;", correct: false, feedback: "2つのコマンドに分けることも可能ですが、一括で行うより安全性が低くなります（バックアップ失敗時も消してしまうリスク）。" },
+                    { text: "BACKUP DATABASE PLUS ARCHIVELOG DELETE INPUT;", correct: true, feedback: "完璧です！このコマンドは、DBバックアップの前後にログをバックアップし、成功した分だけ入力ファイルを削除してくれるDBAの相棒です。" },
+                    { text: "DELETE OBSOLETE;", correct: false, feedback: "これは『保存方針（Retention Policy）』から外れた古いバックアップセットを消すコマンドです。ログを直接処理するものではありません。" }
+                ],
+                terminal: "RMAN> BACKUP DATABASE PLUS ARCHIVELOG DELETE INPUT;"
+            },
+            {
+                id: 4,
+                title: "データファイルの部分リカバリ",
+                scenario: "緊急事態！データファイル 4番（USERS表領域）だけが物理壊損しました。他のデータは無事なので、DB全体を止める時間を最小にしたいです。まず何から始めますか？",
+                choices: [
+                    { text: "RESTORE DATABASE;", correct: false, feedback: "これではDB全体のファイルを上書きしてしまいます。時間がかかりすぎます！" },
+                    { text: "RESTORE DATAFILE 4; RECOVER DATAFILE 4;", correct: true, feedback: "正解！特定のファイルだけを指定してRESTORE（ファイル配置）とRECOVER（ログ適用）を行うのが最短の復旧ルートです。" },
+                    { text: "RECOVER DATABASE;", correct: false, feedback: "RECOVERの前に、バックアップからファイルを戻すRESTOREが必要です。" }
+                ],
+                terminal: "RMAN> RESTORE DATAFILE 4;\nRMAN> RECOVER DATAFILE 4;"
+            }
+        ];
+
+        let currentStageIndex = 0;
+
+        const stageTitle = document.getElementById('stage-title');
+        const scenarioText = document.getElementById('scenario-text');
+        const terminalContent = document.getElementById('terminal-content');
+        const terminal = document.getElementById('terminal');
+        const choicesArea = document.getElementById('choices');
+        const feedbackArea = document.getElementById('feedback');
+        const nextBtn = document.getElementById('next-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const progressBar = document.getElementById('progress');
+        const stageDisplay = document.getElementById('stage-display');
+
+        function initStage() {
+            const stage = stages[currentStageIndex];
+            
+            // UI Reset
+            stageTitle.innerText = stage.title;
+            scenarioText.innerText = stage.scenario;
+            terminalContent.innerText = "";
+            terminal.classList.add('hidden');
+            feedbackArea.classList.add('hidden');
+            nextBtn.classList.add('hidden');
+            choicesArea.innerHTML = "";
+            
+            // Progress Update
+            const progressPercent = (currentStageIndex / stages.length) * 100;
+            progressBar.style.width = `${progressPercent}%`;
+            stageDisplay.innerText = `STAGE ${currentStageIndex + 1}/${stages.length}`;
+
+            // Create Choices
+            stage.choices.forEach((choice, index) => {
+                const btn = document.createElement('button');
+                btn.className = "w-full text-left p-4 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg transition-all active:scale-[0.98] text-sm md:text-base";
+                btn.innerText = choice.text;
+                btn.onclick = () => handleChoice(choice);
+                choicesArea.appendChild(btn);
+            });
+        }
+
+        function handleChoice(choice) {
+            const stage = stages[currentStageIndex];
+            
+            // Show Feedback
+            feedbackArea.classList.remove('hidden', 'bg-green-900/40', 'bg-red-900/40', 'text-green-200', 'text-red-200');
+            if (choice.correct) {
+                feedbackArea.classList.add('bg-green-900/40', 'text-green-200');
+                feedbackArea.innerHTML = `<span class="font-bold">✓ SUCCESS:</span> ${choice.feedback}`;
+                
+                // Show terminal animation
+                terminal.classList.remove('hidden');
+                terminalContent.innerText = "> " + stage.terminal;
+                
+                // Disable choice buttons
+                const buttons = choicesArea.querySelectorAll('button');
+                buttons.forEach(b => b.disabled = true);
+                
+                nextBtn.classList.remove('hidden');
+            } else {
+                feedbackArea.classList.add('bg-red-900/40', 'text-red-200');
+                feedbackArea.innerHTML = `<span class="font-bold">✗ ERROR:</span> ${choice.feedback}`;
+            }
+        }
+
+        nextBtn.onclick = () => {
+            currentStageIndex++;
+            if (currentStageIndex < stages.length) {
+                initStage();
+            } else {
+                showEnding();
+            }
+        };
+
+        function showEnding() {
+            progressBar.style.width = `100%`;
+            stageTitle.innerText = "ミッション完了！";
+            scenarioText.innerHTML = `
+                <div class="text-center py-4">
+                    <p class="text-2xl mb-4 text-orange-400">🏆 RMAN中級 DBA</p>
+                    <p class="text-white not-italic mb-4">おめでとうございます！あなたは増分バックアップとアーカイブログの効率的な管理、そして迅速なファイルリカバリの手法を習得しました。</p>
+                    <div class="bg-black/50 p-4 rounded text-left text-xs text-slate-400 font-sans leading-relaxed">
+                        <strong>今回の復習:</strong><br>
+                        ・Level 0: 増分バックアップの親玉（基点）<br>
+                        ・Level 1 Cumulative: Level 0からの全部（安全）<br>
+                        ・Level 1 Differential: 前回のLevel 0か1から（高速）<br>
+                        ・Plus Archivelog: ログも一緒に守る魔法の言葉<br>
+                        ・Restore/Recover Datafile: 必要な所だけ直すプロの技
+                    </div>
+                </div>
+            `;
+            terminal.classList.add('hidden');
+            choicesArea.innerHTML = "";
+            feedbackArea.classList.add('hidden');
+            nextBtn.classList.add('hidden');
+            restartBtn.classList.remove('hidden');
+        }
+
+        restartBtn.onclick = () => {
+            currentStageIndex = 0;
+            restartBtn.classList.add('hidden');
+            initStage();
+        };
+
+        // Start Game
+        window.onload = initStage;
+    </script>
+</body>
+</html>
