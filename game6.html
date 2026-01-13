@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RMAN Master: The Data Guardian</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&display=swap');
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #e2e8f0; }
+        .terminal { font-family: 'Fira Code', monospace; background-color: #020617; }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+        .warning { color: #fbbf24; }
+        .info { color: #60a5fa; }
+        .blink { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div id="app" class="max-w-4xl mx-auto">
+        <!-- ヘッダー -->
+        <header class="mb-6 flex justify-between items-center border-b border-slate-700 pb-4">
+            <div>
+                <h1 class="text-2xl font-bold text-blue-400">RMAN Master <span class="text-sm font-normal text-slate-400">v1.0</span></h1>
+                <p class="text-xs text-slate-400">Database Recovery Manager Simulator</p>
+            </div>
+            <div class="text-right">
+                <div class="text-sm">DB Status: <span id="db-status" class="font-bold success">OPEN</span></div>
+                <div class="text-sm">Current SCN: <span id="scn-display" class="font-bold text-yellow-500">1000</span></div>
+            </div>
+        </header>
+
+        <!-- メイングリッド -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <!-- 左カラム: ステータス -->
+            <div class="space-y-4">
+                <div class="bg-slate-800 p-4 rounded-lg shadow-lg">
+                    <h2 class="text-lg font-semibold mb-3 border-b border-slate-600 pb-1 italic">Storage Status</h2>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span>Datafiles:</span>
+                            <span id="stat-datafile" class="success font-mono">OK</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Control Files:</span>
+                            <span id="stat-control" class="success font-mono">OK</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Archivelogs:</span>
+                            <span id="stat-arch" class="success font-mono">AVAILABLE</span>
+                        </div>
+                        <div class="mt-4 pt-2 border-t border-slate-700">
+                            <span class="text-slate-400">Backup Info:</span>
+                            <div id="backup-list" class="text-xs mt-1 text-blue-300">No backups available.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800 p-4 rounded-lg shadow-lg">
+                    <h2 class="text-lg font-semibold mb-3 border-b border-slate-600 pb-1 italic">Knowledge Tip</h2>
+                    <p id="knowledge-tip" class="text-xs text-slate-400 leading-relaxed">
+                        RMANの本質は「どのファイルをどこに戻すか(Restore)」と「いつの時点まで変更を適用するか(Recover)」を自動化することにあります。
+                    </p>
+                </div>
+            </div>
+
+            <!-- 中・右カラム: アクションとログ -->
+            <div class="md:col-span-2 space-y-4">
+                <!-- コンソール -->
+                <div class="terminal p-4 rounded-lg h-64 overflow-y-auto border border-slate-600 shadow-inner text-sm" id="log-container">
+                    <div class="info">Welcome to RMAN Master Simulation.</div>
+                    <div class="info text-xs">Target DB: ORCL (NOARCHIVELOG mode initially)</div>
+                    <div class="text-slate-500">RMAN> _</div>
+                </div>
+
+                <!-- アクションエリア -->
+                <div id="action-panel" class="bg-slate-800 p-6 rounded-lg shadow-lg">
+                    <h3 id="panel-title" class="text-xl font-bold mb-4 text-center">Preparation Phase</h3>
+                    <p id="panel-desc" class="text-sm mb-6 text-slate-300">まずはバックアップ戦略を決定してください。本番運用にはアーカイブログモードが必須です。</p>
+                    
+                    <div id="button-grid" class="grid grid-cols-2 gap-3">
+                        <!-- Buttons will be injected here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- モーダル: 災害発生 -->
+        <div id="incident-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+            <div class="bg-slate-800 border-2 border-red-500 p-6 rounded-xl max-w-md w-full shadow-2xl">
+                <h2 class="text-red-500 text-2xl font-bold mb-2 flex items-center">
+                    <span class="mr-2">⚠️</span> INCIDENT OCCURRED
+                </h2>
+                <div id="incident-desc" class="mb-6 text-lg">ハードディスク故障により、データファイルが破損しました！</div>
+                <button onclick="closeIncident()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded transition-colors">
+                    Start Recovery Operation
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- ゲーム状態管理 ---
+        const state = {
+            scn: 1000,
+            dbStatus: 'OPEN', // OPEN, MOUNT, NOMOUNT, CLOSED
+            archivelog: false,
+            backups: [], // { type: 'FULL'|'INC'|'COPY', scn: number, control: bool }
+            health: {
+                datafile: true,
+                control: true,
+                redo: true,
+                archivelogs: [] // SCN ranges available
+            },
+            phase: 'PREP', // PREP, IDLE, RECOVERY
+            lastIncident: null
+        };
+
+        const logContainer = document.getElementById('log-container');
+        const dbStatusEl = document.getElementById('db-status');
+        const scnDisplay = document.getElementById('scn-display');
+        const buttonGrid = document.getElementById('button-grid');
+        const panelTitle = document.getElementById('panel-title');
+        const panelDesc = document.getElementById('panel-desc');
+
+        // --- ユーティリティ ---
+        function addLog(msg, type = 'text-slate-300') {
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = `<span class="text-slate-600 mr-2">RMAN></span> ${msg}`;
+            logContainer.appendChild(div);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function updateUI() {
+            dbStatusEl.innerText = state.dbStatus;
+            dbStatusEl.className = `font-bold ${state.dbStatus === 'OPEN' ? 'success' : 'error'}`;
+            scnDisplay.innerText = state.scn;
+
+            document.getElementById('stat-datafile').innerText = state.health.datafile ? 'OK' : 'CORRUPT';
+            document.getElementById('stat-datafile').className = state.health.datafile ? 'success' : 'error blink';
+            
+            document.getElementById('stat-control').innerText = state.health.control ? 'OK' : 'MISSING';
+            document.getElementById('stat-control').className = state.health.control ? 'success' : 'error blink';
+
+            document.getElementById('stat-arch').innerText = state.archivelog ? 'ENABLED' : 'DISABLED';
+            document.getElementById('stat-arch').className = state.archivelog ? 'info' : 'text-slate-500';
+
+            const backupList = document.getElementById('backup-list');
+            if (state.backups.length === 0) {
+                backupList.innerText = 'No backups available.';
+            } else {
+                backupList.innerHTML = state.backups.map(b => 
+                    `<div>- ${b.type} (SCN:${b.scn})${b.control ? ' + CTL' : ''}</div>`
+                ).join('');
+            }
+        }
+
+        // --- コマンド処理 ---
+        const Commands = {
+            enableArchivelog: () => {
+                addLog("ALTER DATABASE ARCHIVELOG;");
+                state.archivelog = true;
+                addLog("Database mode changed to ARCHIVELOG.", "success");
+                nextPhase();
+            },
+            backupFull: () => {
+                if (state.dbStatus !== 'OPEN') return addLog("Error: DB must be OPEN/MOUNT for backup.", "error");
+                addLog("BACKUP DATABASE PLUS ARCHIVELOG;");
+                state.backups.push({ type: 'FULL', scn: state.scn, control: state.health.control });
+                // バックアップ時点のアーカイブログを「保存」したことにする
+                state.health.archivelogs.push({ start: 0, end: state.scn });
+                addLog("Full backup completed successfully.", "success");
+                if (state.phase === 'PREP') nextPhase();
+                renderIdleActions();
+            },
+            advanceTime: () => {
+                state.scn += Math.floor(Math.random() * 500) + 100;
+                addLog(`Processing transactions... SCN advanced to ${state.scn}`);
+                if (state.archivelog) {
+                    addLog("Archiving redo logs...", "info text-xs");
+                    // アーカイブログが繋がっているシミュレーション
+                    const lastArch = state.health.archivelogs.length > 0 ? state.health.archivelogs[state.health.archivelogs.length-1].end : 0;
+                    state.health.archivelogs.push({ start: lastArch, end: state.scn });
+                }
+                updateUI();
+                // 1/3の確率で災害発生
+                if (Math.random() < 0.4) triggerIncident();
+            },
+            restoreDB: () => {
+                addLog("RESTORE DATABASE;");
+                if (state.dbStatus !== 'MOUNT') return addLog("Error: Database must be MOUNTED to restore.", "error");
+                
+                const backup = [...state.backups].reverse().find(b => b.type === 'FULL');
+                if (backup) {
+                    state.health.datafile = true;
+                    addLog(`Datafiles restored from backup (SCN: ${backup.scn}).`, "info");
+                    addLog("Note: Physical files are back, but logical data is still old.", "warning text-xs italic");
+                } else {
+                    addLog("Error: No backup found to restore!", "error");
+                }
+                updateUI();
+            },
+            recoverDB: () => {
+                addLog("RECOVER DATABASE;");
+                if (!state.health.datafile) return addLog("Error: Restore datafiles first!", "error");
+                
+                // リカバリロジック: バックアップSCNから現在のSCNまでアーカイブログがあるか
+                const backup = [...state.backups].reverse().find(b => b.type === 'FULL');
+                if (!backup) return addLog("Error: No baseline to recover from.", "error");
+
+                if (state.archivelog) {
+                    // アーカイブログがある場合は最新(SCN)までいける
+                    state.scn = state.scn; // 維持
+                    addLog(`Media recovery complete. Applied logs up to SCN: ${state.scn}`, "success");
+                } else {
+                    // アーカイブログがない場合はバックアップ時点までしか戻れない
+                    state.scn = backup.scn;
+                    addLog("Warning: No archivelogs. Data lost since last backup.", "warning");
+                    addLog(`Recovery limited to SCN: ${backup.scn}`, "info");
+                }
+                updateUI();
+            },
+            openDB: () => {
+                addLog("ALTER DATABASE OPEN;");
+                if (state.health.datafile && state.health.control) {
+                    state.dbStatus = 'OPEN';
+                    addLog("Database opened. System online.", "success");
+                    state.phase = 'IDLE';
+                    renderIdleActions();
+                } else {
+                    addLog("Error: System files inconsistent. Cannot open.", "error");
+                }
+                updateUI();
+            },
+            startupMount: () => {
+                addLog("STARTUP MOUNT;");
+                if (state.health.control) {
+                    state.dbStatus = 'MOUNT';
+                    addLog("Database mounted.", "info");
+                    renderRecoveryActions();
+                } else {
+                    state.dbStatus = 'NOMOUNT';
+                    addLog("Control files missing. Database in NOMOUNT.", "error");
+                    renderRecoveryActions();
+                }
+                updateUI();
+            },
+            restoreControl: () => {
+                addLog("RESTORE CONTROLFILE FROM AUTOBACKUP;");
+                const backup = [...state.backups].reverse().find(b => b.control === true);
+                if (backup) {
+                    state.health.control = true;
+                    addLog("Control file restored.", "success");
+                } else {
+                    addLog("Error: No control file backup found!", "error");
+                }
+                updateUI();
+            }
+        };
+
+        // --- フェーズ管理 ---
+        function nextPhase() {
+            if (state.archivelog && state.backups.length > 0) {
+                state.phase = 'IDLE';
+                renderIdleActions();
+            } else if (!state.archivelog) {
+                renderPrepActions();
+            }
+        }
+
+        function renderPrepActions() {
+            panelTitle.innerText = "Preparation Phase";
+            panelDesc.innerText = "データベースの保護設定を行ってください。アーカイブログモードにすると、障害発生直前までの復旧が可能になります。";
+            buttonGrid.innerHTML = '';
+            
+            createButton("Enable Archivelog", Commands.enableArchivelog, "bg-blue-600 hover:bg-blue-500");
+            createButton("Take Full Backup", Commands.backupFull, "bg-green-600 hover:bg-green-500");
+        }
+
+        function renderIdleActions() {
+            panelTitle.innerText = "Operation Phase";
+            panelDesc.innerText = "現在は安定運用中です。時間を進めてトランザクションを発生させるか、追加のバックアップを取得できます。";
+            buttonGrid.innerHTML = '';
+            
+            createButton("Next Day (Advance SCN)", Commands.advanceTime, "bg-slate-700 hover:bg-slate-600");
+            createButton("Take Full Backup", Commands.backupFull, "bg-green-600 hover:bg-green-500");
+        }
+
+        function renderRecoveryActions() {
+            panelTitle.innerText = "Recovery Phase";
+            panelDesc.innerText = "DBが停止しています。RMANを使用して復旧手順を実行してください。";
+            buttonGrid.innerHTML = '';
+
+            if (state.dbStatus === 'CLOSED') {
+                createButton("Startup Mount", Commands.startupMount, "bg-yellow-700 hover:bg-yellow-600");
+            } else if (state.dbStatus === 'NOMOUNT') {
+                createButton("Restore Controlfile", Commands.restoreControl, "bg-orange-600 hover:bg-orange-500");
+                createButton("Alter DB Mount", Commands.startupMount, "bg-yellow-700 hover:bg-yellow-600");
+            } else if (state.dbStatus === 'MOUNT') {
+                createButton("Restore Database", Commands.restoreDB, "bg-indigo-600 hover:bg-indigo-500");
+                createButton("Recover Database", Commands.recoverDB, "bg-purple-600 hover:bg-purple-500");
+                createButton("Open Database", Commands.openDB, "bg-green-600 hover:bg-green-500");
+            }
+        }
+
+        function createButton(text, action, colorClass) {
+            const btn = document.createElement('button');
+            btn.className = `${colorClass} text-white font-bold py-3 px-4 rounded transition-transform active:scale-95 text-sm`;
+            btn.innerText = text;
+            btn.onclick = () => {
+                action();
+                updateUI();
+            };
+            buttonGrid.appendChild(btn);
+        }
+
+        // --- 災害イベント ---
+        function triggerIncident() {
+            const incidents = [
+                { id: 'DF', desc: "ディスク障害によりデータファイルが破損しました！", effect: () => { state.health.datafile = false; } },
+                { id: 'CF', desc: "落雷による不意の停止で制御ファイルが消失しました！", effect: () => { state.health.control = false; } },
+                { id: 'ALL', desc: "大規模なディスクアレイ故障により全ファイルが全滅しました！", effect: () => { state.health.datafile = false; state.health.control = false; } }
+            ];
+            
+            const incident = incidents[Math.floor(Math.random() * incidents.length)];
+            state.lastIncident = incident;
+            incident.effect();
+            
+            document.getElementById('incident-desc').innerText = incident.desc;
+            document.getElementById('incident-modal').classList.remove('hidden');
+            
+            state.dbStatus = 'CLOSED';
+            state.phase = 'RECOVERY';
+            addLog(`CRITICAL ERROR: Database crashed.`, "error blink font-bold");
+            updateUI();
+        }
+
+        function closeIncident() {
+            document.getElementById('incident-modal').classList.add('hidden');
+            renderRecoveryActions();
+        }
+
+        // --- 初期化 ---
+        window.onload = () => {
+            addLog("RMAN connected to target database: ORCL");
+            renderPrepActions();
+            updateUI();
+        };
+    </script>
+</body>
+</html>
+
