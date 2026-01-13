@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RMAN Recovery Master</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap');
+        
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+            font-family: 'Fira Code', monospace;
+        }
+
+        .terminal {
+            background-color: #000;
+            border: 1px solid #334155;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-ok { background-color: #22c55e; box-shadow: 0 0 8px #22c55e; }
+        .status-error { background-color: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        .status-warning { background-color: #eab308; box-shadow: 0 0 8px #eab308; }
+        .status-off { background-color: #475569; }
+
+        .scanline {
+            width: 100%;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.05);
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            animation: scan 4s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+
+        #output::-webkit-scrollbar {
+            width: 8px;
+        }
+        #output::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-5xl mx-auto">
+        <!-- Header -->
+        <header class="mb-6 flex justify-between items-center border-b border-slate-700 pb-4">
+            <div>
+                <h1 class="text-2xl font-bold text-blue-400">RMAN RECOVERY MASTER</h1>
+                <p class="text-xs text-slate-400">Oracle Database Simulation Environment v1.0</p>
+            </div>
+            <div class="text-right">
+                <div id="db-instance-status" class="flex items-center gap-2">
+                    <span class="text-sm">Instance:</span>
+                    <span id="instance-label" class="text-sm font-bold uppercase">Shutdown</span>
+                    <span id="instance-dot" class="status-dot status-off"></span>
+                </div>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left Panel: Status Monitor -->
+            <div class="space-y-6">
+                <div class="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                    <h2 class="text-sm font-bold text-slate-400 mb-4 border-b border-slate-700 pb-2 uppercase">Storage Status</h2>
+                    <div class="space-y-3" id="storage-list">
+                        <!-- Storage items will be generated here -->
+                    </div>
+                </div>
+
+                <div class="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                    <h2 class="text-sm font-bold text-slate-400 mb-4 border-b border-slate-700 pb-2 uppercase">Recovery Progress</h2>
+                    <div class="text-center py-4">
+                        <div class="text-xs text-slate-500 mb-1">Current Task</div>
+                        <div id="current-task-name" class="text-sm font-bold text-blue-300">Scenario 1: Sudden Death</div>
+                        <div class="w-full bg-slate-900 h-2 mt-3 rounded-full overflow-hidden">
+                            <div id="progress-bar" class="bg-blue-500 h-full w-0 transition-all duration-500"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-blue-900/20 p-4 rounded-lg border border-blue-500/30">
+                    <h2 class="text-sm font-bold text-blue-400 mb-2">Hints / Reference</h2>
+                    <ul class="text-[10px] text-blue-200/70 space-y-1 list-disc pl-4">
+                        <li>STARTUP NOMOUNT: Starts instance (needs SPFILE)</li>
+                        <li>ALTER DATABASE MOUNT: Reads Control Files</li>
+                        <li>RESTORE DATABASE: Copies files from backup</li>
+                        <li>RECOVER DATABASE: Applies Archive/Redo logs</li>
+                        <li>ALTER DATABASE OPEN: Final step</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Right Panel: Terminal -->
+            <div class="lg:col-span-2 flex flex-col h-[600px]">
+                <div class="terminal flex-1 relative flex flex-col overflow-hidden rounded-t-lg">
+                    <div class="scanline"></div>
+                    <div id="output" class="flex-1 overflow-y-auto p-4 space-y-2 text-sm">
+                        <div class="text-green-500">Recovery Manager: Release 19.0.0.0.0 - Production</div>
+                        <div class="text-slate-400">Connected to target database: ORCL (not started)</div>
+                        <div class="text-blue-400 mt-4">Welcome, DBA. System is in critical state. Identify the failure and recover the database.</div>
+                        <div class="text-slate-500 italic mt-2">Type 'help' for available commands.</div>
+                    </div>
+                </div>
+                <div class="bg-slate-900 border-x border-b border-slate-700 p-2 rounded-b-lg flex">
+                    <span class="text-blue-500 font-bold px-2">RMAN&gt;</span>
+                    <input type="text" id="command-input" class="bg-transparent border-none outline-none flex-1 text-slate-200" autofocus autocomplete="off">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- UI Overlay for Level Up -->
+    <div id="modal" class="fixed inset-0 bg-black/80 flex items-center justify-center z-50 hidden">
+        <div class="bg-slate-800 border border-blue-500 p-8 rounded-xl max-w-md text-center">
+            <h2 id="modal-title" class="text-3xl font-bold text-blue-400 mb-4">RECOVERY SUCCESS</h2>
+            <p id="modal-body" class="text-slate-300 mb-6">Database is now OPEN. You have successfully recovered the system.</p>
+            <button onclick="nextLevel()" class="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2 rounded-lg font-bold transition-colors">NEXT SCENARIO</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Game State ---
+        const DB_STATES = {
+            SHUTDOWN: 'Shutdown',
+            NOMOUNT: 'NoMount',
+            MOUNT: 'Mount',
+            OPEN: 'Open'
+        };
+
+        let gameState = {
+            currentLevel: 0,
+            dbStatus: DB_STATES.SHUTDOWN,
+            storage: {
+                spfile: true,
+                controlfile: true,
+                datafiles: true,
+                archivelogs: true,
+                redo: true
+            },
+            backups: {
+                exists: true,
+                isRestored: false,
+                isRecovered: false
+            },
+            history: []
+        };
+
+        const scenarios = [
+            {
+                name: "Scenario 1: Datafile Corruption",
+                description: "Critical datafiles are missing. Database won't open.",
+                init: () => {
+                    gameState.storage.datafiles = false;
+                    gameState.backups.isRestored = false;
+                    gameState.backups.isRecovered = false;
+                    gameState.dbStatus = DB_STATES.SHUTDOWN;
+                },
+                goal: DB_STATES.OPEN
+            },
+            {
+                name: "Scenario 2: Control File Loss",
+                description: "Both control files are lost. You need to RESTORE CONTROLFILE FROM AUTOBACKUP.",
+                init: () => {
+                    gameState.storage.controlfile = false;
+                    gameState.backups.isRestored = false;
+                    gameState.backups.isRecovered = false;
+                    gameState.dbStatus = DB_STATES.SHUTDOWN;
+                },
+                goal: DB_STATES.OPEN
+            },
+            {
+                name: "Scenario 3: Complete Disaster",
+                description: "SPFILE and Datafiles are gone. Start from scratch.",
+                init: () => {
+                    gameState.storage.spfile = false;
+                    gameState.storage.datafiles = false;
+                    gameState.storage.controlfile = true; // For complexity
+                    gameState.dbStatus = DB_STATES.SHUTDOWN;
+                },
+                goal: DB_STATES.OPEN
+            }
+        ];
+
+        // --- DOM Elements ---
+        const output = document.getElementById('output');
+        const cmdInput = document.getElementById('command-input');
+        const instanceLabel = document.getElementById('instance-label');
+        const instanceDot = document.getElementById('instance-dot');
+        const storageList = document.getElementById('storage-list');
+        const modal = document.getElementById('modal');
+        const progressBar = document.getElementById('progress-bar');
+        const currentTaskLabel = document.getElementById('current-task-name');
+
+        // --- Core Logic ---
+
+        function initLevel() {
+            scenarios[gameState.currentLevel].init();
+            currentTaskLabel.innerText = scenarios[gameState.currentLevel].name;
+            updateUI();
+            log(`SYSTEM: ${scenarios[gameState.currentLevel].description}`, "text-yellow-400 font-bold");
+            updateProgressBar();
+        }
+
+        function updateUI() {
+            // Update DB Status
+            instanceLabel.innerText = gameState.dbStatus;
+            instanceDot.className = 'status-dot ' + (
+                gameState.dbStatus === DB_STATES.OPEN ? 'status-ok' :
+                gameState.dbStatus === DB_STATES.SHUTDOWN ? 'status-off' : 'status-warning'
+            );
+
+            // Update Storage Icons
+            storageList.innerHTML = '';
+            const files = [
+                { id: 'spfile', name: 'SPFILE / Init.ora' },
+                { id: 'controlfile', name: 'Control Files' },
+                { id: 'datafiles', name: 'Data Files (DBF)' },
+                { id: 'redo', name: 'Online Redo Logs' },
+                { id: 'archivelogs', name: 'Archive Logs' }
+            ];
+
+            files.forEach(file => {
+                const isOk = gameState.storage[file.id];
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-center bg-slate-900/50 p-2 rounded border border-slate-700/50';
+                div.innerHTML = `
+                    <span class="text-xs ${isOk ? 'text-slate-300' : 'text-red-400'}">${file.name}</span>
+                    <span class="status-dot ${isOk ? 'status-ok' : 'status-error'}"></span>
+                `;
+                storageList.appendChild(div);
+            });
+        }
+
+        function log(msg, color = 'text-slate-300') {
+            const line = document.createElement('div');
+            line.className = color;
+            line.innerText = msg;
+            output.appendChild(line);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function handleCommand(rawCmd) {
+            const cmd = rawCmd.toLowerCase().trim();
+            log(`RMAN> ${rawCmd}`, "text-blue-400 font-bold");
+
+            if (cmd === 'help') {
+                log("Available Commands:");
+                log("- startup [nomount]");
+                log("- alter database mount");
+                log("- restore database");
+                log("- restore controlfile from autobackup");
+                log("- restore spfile from autobackup");
+                log("- recover database");
+                log("- alter database open [resetlogs]");
+                log("- list backup");
+                log("- shutdown immediate");
+                return;
+            }
+
+            if (cmd === 'list backup') {
+                log("List of Backups:");
+                log("BS Key  Type LV Size       Device Type Elapsed Time Completion Time");
+                log("------- ---- -- ---------- ----------- ------------ ---------------");
+                log("1       Full    1.2G       DISK        00:00:45     23-MAY-24");
+                return;
+            }
+
+            // 1. STARTUP
+            if (cmd === 'startup nomount') {
+                if (gameState.dbStatus !== DB_STATES.SHUTDOWN) {
+                    log("ORA-01081: cannot start already-running ORACLE - shut it down first", "text-red-500");
+                } else if (!gameState.storage.spfile) {
+                    log("ORA-01078: failure in processing system parameters", "text-red-500");
+                    log("LRM-00109: could not open parameter file '/u01/app/oracle/dbs/spfileORCL.ora'", "text-red-500");
+                } else {
+                    gameState.dbStatus = DB_STATES.NOMOUNT;
+                    log("ORACLE instance started");
+                    log("Total System Global Area  1610612736 bytes");
+                }
+            } else if (cmd === 'startup') {
+                log("Attempting startup...");
+                if (gameState.storage.spfile) {
+                    gameState.dbStatus = DB_STATES.NOMOUNT;
+                    log("ORACLE instance started.");
+                    // Try to mount automatically
+                    handleCommand("alter database mount");
+                } else {
+                    log("ORA-01078: failure in processing system parameters", "text-red-500");
+                }
+            }
+
+            // 2. MOUNT
+            else if (cmd === 'alter database mount') {
+                if (gameState.dbStatus !== DB_STATES.NOMOUNT) {
+                    log("ORA-01109: database not open", "text-red-500");
+                    log("ORA-01507: database not mounted", "text-red-500");
+                } else if (!gameState.storage.controlfile) {
+                    log("ORA-00205: error in identifying control file, check alert log for more info", "text-red-500");
+                } else {
+                    gameState.dbStatus = DB_STATES.MOUNT;
+                    log("database mounted");
+                }
+            }
+
+            // 3. RESTORE
+            else if (cmd === 'restore database') {
+                if (gameState.dbStatus !== DB_STATES.MOUNT) {
+                    log("RMAN-06023: no backup or copy of datafile 1 found to restore", "text-red-500");
+                    log("Error: Database must be in MOUNT state for restore.", "text-yellow-500");
+                } else {
+                    log("Starting restore at 23-MAY-24");
+                    log("using channel ORA_DISK_1");
+                    setTimeout(() => {
+                        gameState.storage.datafiles = true;
+                        gameState.backups.isRestored = true;
+                        log("Finished restore at 23-MAY-24", "text-green-400");
+                        updateUI();
+                    }, 1000);
+                }
+            } else if (cmd === 'restore controlfile from autobackup') {
+                if (gameState.dbStatus !== DB_STATES.NOMOUNT) {
+                    log("Error: Instance must be in NOMOUNT state to restore controlfile.", "text-yellow-500");
+                } else {
+                    log("Starting restore at 23-MAY-24");
+                    setTimeout(() => {
+                        gameState.storage.controlfile = true;
+                        log("Control File restore complete.", "text-green-400");
+                        updateUI();
+                    }, 1000);
+                }
+            } else if (cmd === 'restore spfile from autobackup') {
+                log("Starting restore at 23-MAY-24");
+                setTimeout(() => {
+                    gameState.storage.spfile = true;
+                    log("SPFILE restore complete. Please restart instance.", "text-green-400");
+                    updateUI();
+                }, 1000);
+            }
+
+            // 4. RECOVER
+            else if (cmd === 'recover database') {
+                if (gameState.dbStatus !== DB_STATES.MOUNT) {
+                    log("Error: Database must be MOUNTED to recover.", "text-red-500");
+                } else if (!gameState.storage.datafiles) {
+                    log("ORA-01110: data file 1: '/u01/app/oracle/oradata/ORCL/system01.dbf'", "text-red-500");
+                    log("ORA-01113: file 1 needs media recovery", "text-red-500");
+                } else {
+                    log("Starting recovery at 23-MAY-24");
+                    log("using channel ORA_DISK_1");
+                    log("channel ORA_DISK_1: starting incremental datafile backup set restore");
+                    setTimeout(() => {
+                        gameState.backups.isRecovered = true;
+                        log("media recovery complete, elapsed time: 00:00:03", "text-green-400");
+                        updateUI();
+                    }, 1500);
+                }
+            }
+
+            // 5. OPEN
+            else if (cmd === 'alter database open' || cmd === 'alter database open resetlogs') {
+                if (gameState.dbStatus !== DB_STATES.MOUNT) {
+                    log("ORA-01507: database not mounted", "text-red-500");
+                } else if (!gameState.storage.datafiles) {
+                    log("ORA-01157: cannot identify/lock data file 1 - see DBWR trace file", "text-red-500");
+                } else if (!gameState.backups.isRecovered) {
+                    log("ORA-01113: file 1 needs media recovery", "text-red-500");
+                } else {
+                    gameState.dbStatus = DB_STATES.OPEN;
+                    log("database opened", "text-green-400 font-bold");
+                    checkWinCondition();
+                }
+            }
+
+            // 6. SHUTDOWN
+            else if (cmd.startsWith('shutdown')) {
+                gameState.dbStatus = DB_STATES.SHUTDOWN;
+                gameState.backups.isRestored = false;
+                gameState.backups.isRecovered = false;
+                log("Database closed.");
+                log("Database dismounted.");
+                log("ORACLE instance shut down.");
+            }
+
+            else {
+                log(`RMAN-00558: error encountered while parsing input commands`, "text-red-500");
+                log(`Unknown command: ${cmd}`, "text-slate-500");
+            }
+
+            updateUI();
+            updateProgressBar();
+        }
+
+        function updateProgressBar() {
+            let progress = 0;
+            if (gameState.dbStatus === DB_STATES.NOMOUNT) progress = 20;
+            if (gameState.dbStatus === DB_STATES.MOUNT) progress = 40;
+            if (gameState.storage.datafiles && gameState.backups.isRestored) progress = 60;
+            if (gameState.backups.isRecovered) progress = 80;
+            if (gameState.dbStatus === DB_STATES.OPEN) progress = 100;
+            
+            progressBar.style.width = progress + '%';
+        }
+
+        function checkWinCondition() {
+            if (gameState.dbStatus === scenarios[gameState.currentLevel].goal) {
+                setTimeout(() => {
+                    modal.classList.remove('hidden');
+                    if (gameState.currentLevel === scenarios.length - 1) {
+                        document.getElementById('modal-title').innerText = "ALL SCENARIOS CLEAR!";
+                        document.getElementById('modal-body').innerText = "Congratulations, Senior DBA. You have mastered RMAN basics.";
+                    }
+                }, 1000);
+            }
+        }
+
+        function nextLevel() {
+            if (gameState.currentLevel < scenarios.length - 1) {
+                gameState.currentLevel++;
+                modal.classList.add('hidden');
+                output.innerHTML = '';
+                log(`Starting ${scenarios[gameState.currentLevel].name}...`, "text-blue-400 font-bold");
+                initLevel();
+            } else {
+                location.reload();
+            }
+        }
+
+        // --- Event Listeners ---
+        cmdInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const cmd = cmdInput.value;
+                if (cmd) {
+                    handleCommand(cmd);
+                    cmdInput.value = '';
+                }
+            }
+        });
+
+        // Initialize first level
+        window.onload = () => {
+            initLevel();
+        };
+
+    </script>
+</body>
+</html>
+
